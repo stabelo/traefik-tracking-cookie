@@ -12,8 +12,6 @@ import (
 func TestTraefikTrackingCookie(t *testing.T) {
 	cfg := traefik_tracking_cookie.CreateConfig()
 	cfg.Domain = "example.com"
-	cfg.Name = "test-cookie"
-	cfg.Expires = 0
 	cfg.HttpOnly = true
 	cfg.Secure = true
 
@@ -34,9 +32,9 @@ func TestTraefikTrackingCookie(t *testing.T) {
 
 	handler.ServeHTTP(recorder, req)
 
-	cookie := recorder.Header().Get("Set-Cookie")
+	cookies := recorder.Header().Values("Set-Cookie")
 
-	if cookie == "" {
-		t.Errorf("Set-Cookie header not set")
+	if len(cookies) != 2 {
+		t.Errorf("Set-Cookie header not set for both client and session")
 	}
 }

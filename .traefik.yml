@@ -6,5 +6,4 @@ import: github.com/stabelo/traefik-tracking-cookie
 summary: 'Simple middeware plugin that assigns a random value to a cookie if not already present.'
 
 testData:
-  name: cookie-name
-  domain: test.com
+  domain: example.com

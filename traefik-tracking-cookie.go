@@ -4,72 +4,99 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"time"
 )
 
-const defaultCookieName = "tid"
+const cookieNamePrefix = "ttc"
+const clientCookieName = "cid"
+const sessionCookieName = "sid"
 
 type Config struct {
-	Domain   string `json:"domain,omitempty" yaml:"domain,omitempty" toml:"domain,omitempty"`
-	Name     string `json:"name,omitempty" yaml:"name,omitempty" toml:"name,omitempty"`
-	Expires  int    `json:"expires,omitempty" yaml:"expires,omitempty" toml:"expires,omitempty"`
-	HttpOnly bool   `json:"httponly,omitempty" yaml:"httponly,omitempty" toml:"httponly,omitempty"`
-	Secure   bool   `json:"secure,omitempty" yaml:"secure,omitempty" toml:"secure,omitempty"`
+	Domain              string `json:"domain,omitempty" yaml:"domain,omitempty" toml:"domain,omitempty"`
+	CookieNamePrefix    string `json:"cookienameprefix,omitempty" yaml:"cookienameprefix,omitempty" toml:"cookienameprefix,omitempty"`
+	ClientCookieName    string `json:"clientcookiename,omitempty" yaml:"clientcookiename,omitempty" toml:"clientcookiename,omitempty"`
+	SessionCookieName   string `json:"sessioncookiename,omitempty" yaml:"sessioncookiename,omitempty" toml:"sessioncookiename,omitempty"`
+	ClientCookieExpires int    `json:"clientcookieexpires,omitempty" yaml:"clientcookieexpires,omitempty" toml:"clientcookieexpires,omitempty"`
+	HttpOnly            bool   `json:"httponly,omitempty" yaml:"httponly,omitempty" toml:"httponly,omitempty"`
+	Secure              bool   `json:"secure,omitempty" yaml:"secure,omitempty" toml:"secure,omitempty"`
 }
 
 func CreateConfig() *Config {
 	return &Config{
-		Name:    defaultCookieName,
-		Expires: 0,
+		CookieNamePrefix:    cookieNamePrefix,
+		ClientCookieName:    clientCookieName,
+		SessionCookieName:   sessionCookieName,
+		ClientCookieExpires: 365 * 24 * 60 * 60,
 	}
 }
 
 type TraefikTrackingCookie struct {
-	next           http.Handler
-	name           string
-	cookieDomain   string
-	cookieName     string
-	cookieExpires  int
-	cookieHttpOnly bool
-	cookieSecure   bool
+	next                http.Handler
+	name                string
+	cookieDomain        string
+	clientCookieName    string
+	sessionCookieName   string
+	clientCookieExpires int
+	cookieHttpOnly      bool
+	cookieSecure        bool
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	return &TraefikTrackingCookie{
-		next:           next,
-		name:           name,
-		cookieDomain:   config.Domain,
-		cookieName:     config.Name,
-		cookieExpires:  config.Expires,
-		cookieHttpOnly: config.HttpOnly,
-		cookieSecure:   config.Secure,
+		next:                next,
+		name:                name,
+		cookieDomain:        config.Domain,
+		clientCookieName:    fmt.Sprintf("%s-%s", config.CookieNamePrefix, config.ClientCookieName),
+		sessionCookieName:   fmt.Sprintf("%s-%s", config.CookieNamePrefix, config.SessionCookieName),
+		clientCookieExpires: config.ClientCookieExpires,
+		cookieHttpOnly:      config.HttpOnly,
+		cookieSecure:        config.Secure,
 	}, nil
 }
 
 func (a *TraefikTrackingCookie) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	cookie, err := req.Cookie(a.cookieName)
+	clientCookie, err := req.Cookie(a.clientCookieName)
 
 	if err != nil {
 		if val, err := generateRandomString(20); err == nil {
 			var expires time.Time
 
-			if a.cookieExpires > 0 {
-				expires = time.Now().Add(time.Duration(a.cookieExpires) * time.Second)
+			if a.clientCookieExpires > 0 {
+				expires = time.Now().Add(time.Duration(a.clientCookieExpires) * time.Second)
 			}
 
-			cookie = &http.Cookie{
-				Name:     a.cookieName,
+			clientCookie = &http.Cookie{
+				Name:     a.clientCookieName,
 				Value:    val,
 				Domain:   a.cookieDomain,
 				Path:     "/",
-				MaxAge:   a.cookieExpires,
+				MaxAge:   a.clientCookieExpires,
 				Expires:  expires,
 				HttpOnly: a.cookieHttpOnly,
 				Secure:   a.cookieSecure,
 			}
 
-			http.SetCookie(rw, cookie)
+			http.SetCookie(rw, clientCookie)
+		}
+	}
+
+	sessionCookie, err := req.Cookie(a.sessionCookieName)
+
+	if err != nil {
+		if val, err := generateRandomString(20); err == nil {
+			sessionCookie = &http.Cookie{
+				Name:     a.sessionCookieName,
+				Value:    val,
+				Domain:   a.cookieDomain,
+				Path:     "/",
+				MaxAge:   0,
+				HttpOnly: a.cookieHttpOnly,
+				Secure:   a.cookieSecure,
+			}
+
+			http.SetCookie(rw, sessionCookie)
 		}
 	}
 
