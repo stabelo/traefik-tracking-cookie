@@ -21,6 +21,7 @@ type Config struct {
 	ClientCookieExpires int    `json:"clientcookieexpires,omitempty" yaml:"clientcookieexpires,omitempty" toml:"clientcookieexpires,omitempty"`
 	HttpOnly            bool   `json:"httponly,omitempty" yaml:"httponly,omitempty" toml:"httponly,omitempty"`
 	Secure              bool   `json:"secure,omitempty" yaml:"secure,omitempty" toml:"secure,omitempty"`
+	Length              int    `json:"length,omitempty" yaml:"length,omitempty" toml:"length,omitempty"`
 }
 
 func CreateConfig() *Config {
@@ -29,6 +30,7 @@ func CreateConfig() *Config {
 		ClientCookieName:    clientCookieName,
 		SessionCookieName:   sessionCookieName,
 		ClientCookieExpires: 365 * 24 * 60 * 60,
+		Length:              32,
 	}
 }
 
@@ -41,6 +43,7 @@ type TraefikTrackingCookie struct {
 	clientCookieExpires int
 	cookieHttpOnly      bool
 	cookieSecure        bool
+	length              int
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
@@ -53,6 +56,7 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		clientCookieExpires: config.ClientCookieExpires,
 		cookieHttpOnly:      config.HttpOnly,
 		cookieSecure:        config.Secure,
+		length:              config.Length,
 	}, nil
 }
 
@@ -60,7 +64,7 @@ func (a *TraefikTrackingCookie) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 	clientCookie, err := req.Cookie(a.clientCookieName)
 
 	if err != nil {
-		if val, err := generateRandomString(20); err == nil {
+		if val, err := generateRandomString(a.length); err == nil {
 			var expires time.Time
 
 			if a.clientCookieExpires > 0 {
@@ -85,7 +89,7 @@ func (a *TraefikTrackingCookie) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 	sessionCookie, err := req.Cookie(a.sessionCookieName)
 
 	if err != nil {
-		if val, err := generateRandomString(20); err == nil {
+		if val, err := generateRandomString(a.length); err == nil {
 			sessionCookie = &http.Cookie{
 				Name:     a.sessionCookieName,
 				Value:    val,
