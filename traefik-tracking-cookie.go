@@ -63,7 +63,7 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 func (a *TraefikTrackingCookie) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	clientCookie, err := req.Cookie(a.clientCookieName)
 
-	if err != nil {
+	if err != nil || time.Now().Add(time.Duration(float64(a.clientCookieExpires)*0.75)*time.Second).After(clientCookie.Expires) {
 		if val, err := generateRandomString(a.length); err == nil {
 			var expires time.Time
 
