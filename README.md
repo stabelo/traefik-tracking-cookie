@@ -5,7 +5,7 @@ experimental:
   plugins:
     example:
       moduleName: github.com/stabelo/traefik-tracking-cookie
-      version: v0.0.3
+      version: v1.0.0
 ```
 
 Here is an example of a file provider dynamic configuration (given here in YAML), where the interesting part is the `http.middlewares` section:
