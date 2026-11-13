@@ -1,7 +1,7 @@
 displayName: Traefik Tracking Cookie Plugin
 type: middleware
 
-import: github.com/stabelo/traefik-tracking-cookie
+import: github.com/gast-traefik/traefik-tracking-cookie
 
 summary: 'Simple middeware plugin that assigns a random value to a cookie if not already present.'
 

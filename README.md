@@ -4,7 +4,7 @@
 experimental:
   plugins:
     example:
-      moduleName: github.com/stabelo/traefik-tracking-cookie
+      moduleName: github.com/gast-traefik/traefik-tracking-cookie
       version: v1.0.0
 ```
 

@@ -131,6 +131,7 @@ func (a *TraefikTrackingCookie) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 			}
 
 			http.SetCookie(rw, clientCookie)
+			req.AddCookie(clientCookie)
 		}
 	}
 
@@ -152,6 +153,7 @@ func (a *TraefikTrackingCookie) ServeHTTP(rw http.ResponseWriter, req *http.Requ
 			}
 
 			http.SetCookie(rw, sessionCookie)
+			req.AddCookie(sessionCookie)
 		}
 	}
 

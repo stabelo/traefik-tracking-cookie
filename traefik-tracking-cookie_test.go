@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	traefik_tracking_cookie "github.com/stabelo/traefik-tracking-cookie"
+	traefik_tracking_cookie "github.com/gast-traefik/traefik-tracking-cookie"
 )
 
 func TestTraefikTrackingCookie(t *testing.T) {
@@ -20,11 +20,14 @@ func TestTraefikTrackingCookie(t *testing.T) {
 		{
 			name: "basic functionality",
 			config: &traefik_tracking_cookie.Config{
-				Domain:   "example.com",
-				HttpOnly: true,
-				Secure:   true,
-				Length:   16,
-				SameSite: "lax",
+				Domain:            "example.com",
+				CookieNamePrefix:  "ttc",
+				ClientCookieName:  "cid",
+				SessionCookieName: "sid",
+				HttpOnly:          true,
+				Secure:            true,
+				Length:            16,
+				SameSite:          "lax",
 			},
 			want: 2,
 		},
@@ -72,13 +75,101 @@ func TestTraefikTrackingCookie(t *testing.T) {
 			if tt.config.SameSite != "" {
 				found := false
 				for _, cookie := range cookies {
-					if strings.Contains(cookie, "SameSite="+strings.Title(tt.config.SameSite)) {
+					if strings.Contains(strings.ToLower(cookie), "samesite="+tt.config.SameSite) {
 						found = true
 						break
 					}
 				}
 				if !found {
 					t.Errorf("SameSite attribute not found in cookies")
+				}
+			}
+		})
+	}
+}
+
+func TestCookiesAvailableToNextHandler(t *testing.T) {
+	const clientName = "X-Test-BrowserID"
+	const sessionName = "X-Test-SessionID"
+
+	tests := []struct {
+		name     string
+		existing map[string]string
+	}{
+		{name: "both cookies missing"},
+		{name: "client cookie missing", existing: map[string]string{sessionName: "existing-session"}},
+		{name: "session cookie missing", existing: map[string]string{clientName: "existing-client"}},
+		{
+			name: "both cookies present",
+			existing: map[string]string{
+				clientName:  "existing-client",
+				sessionName: "existing-session",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := traefik_tracking_cookie.CreateConfig()
+			config.CookieNamePrefix = "X-Test"
+			config.ClientCookieName = "BrowserID"
+			config.SessionCookieName = "SessionID"
+
+			req := httptest.NewRequest(http.MethodGet, "https://example.com/", nil)
+			req.AddCookie(&http.Cookie{Name: "unrelated", Value: "keep-me"})
+			for name, value := range tt.existing {
+				req.AddCookie(&http.Cookie{Name: name, Value: value})
+			}
+
+			var forwardedCookies []*http.Cookie
+			calls := 0
+			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+				calls++
+				forwardedCookies = req.Cookies()
+				rw.WriteHeader(http.StatusNoContent)
+			})
+			handler, err := traefik_tracking_cookie.New(context.Background(), next, config, "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, req)
+
+			if calls != 1 || recorder.Code != http.StatusNoContent {
+				t.Fatalf("next handler calls = %d, status = %d", calls, recorder.Code)
+			}
+			if len(forwardedCookies) != 3 {
+				t.Fatalf("expected both tracking cookies and the unrelated cookie, got %v", forwardedCookies)
+			}
+			forwarded := make(map[string]string)
+			for _, cookie := range forwardedCookies {
+				forwarded[cookie.Name] = cookie.Value
+			}
+			if forwarded["unrelated"] != "keep-me" {
+				t.Error("unrelated cookie was not preserved")
+			}
+			for _, name := range []string{clientName, sessionName} {
+				if forwarded[name] == "" {
+					t.Errorf("next handler did not receive %s", name)
+				}
+			}
+			for name, value := range tt.existing {
+				if forwarded[name] != value {
+					t.Errorf("existing cookie %s changed: got %q, want %q", name, forwarded[name], value)
+				}
+			}
+
+			cookies := recorder.Result().Cookies()
+			if len(cookies) != 2-len(tt.existing) {
+				t.Fatalf("expected %d new cookies, got %d", 2-len(tt.existing), len(cookies))
+			}
+			for _, cookie := range cookies {
+				if _, exists := tt.existing[cookie.Name]; exists {
+					t.Errorf("existing cookie %s was reissued", cookie.Name)
+				}
+				if len(cookie.Value) != config.Length || forwarded[cookie.Name] != cookie.Value {
+					t.Errorf("new cookie %s differs between the response and forwarded request", cookie.Name)
 				}
 			}
 		})
